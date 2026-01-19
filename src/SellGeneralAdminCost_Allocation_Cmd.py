@@ -4816,6 +4816,9 @@ def _build_pj_summary_step0009_paths(pszDirectory: str) -> List[str]:
 
 def _build_excel_sheet_title_from_path(pszPath: str) -> str:
     pszBaseName = os.path.splitext(os.path.basename(pszPath))[0]
+    objMatch = re.search(r"(\d{4}年\d{2}月-\d{4}年\d{2}月)", pszBaseName)
+    if objMatch:
+        return objMatch.group(1)
     pszSanitized = re.sub(r"[\[\]\:\*\?\/\\]", "_", pszBaseName)
     return pszSanitized[:31] if len(pszSanitized) > 31 else pszSanitized
 
