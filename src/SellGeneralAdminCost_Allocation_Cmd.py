@@ -4601,6 +4601,7 @@ def create_cumulative_reports(pszPlPath: str) -> None:
     try_create_cp_step0009_vertical(pszDirectory)
     try_create_cp_group_step0009_vertical(pszDirectory)
     create_pj_summary_gross_profit_ranking_excel(pszDirectory)
+    create_pj_summary_sales_cost_sga_profit_excel(pszDirectory)
 
 
 def copy_cp_step0005_vertical_files(pszDirectory: str, objPaths: List[Optional[str]]) -> None:
@@ -4792,6 +4793,68 @@ def create_pj_summary_pl_cr_manhour_excel(
     pszOutputPath: str = os.path.join(
         pszTargetDirectory,
         f"PJサマリ_単・累計_{pszProjectName}.xlsx",
+    )
+    objWorkbook.save(pszOutputPath)
+    return pszOutputPath
+
+
+def _build_pj_summary_step0009_paths(pszDirectory: str) -> List[str]:
+    objPaths: List[str] = []
+    if not os.path.isdir(pszDirectory):
+        return objPaths
+    objPattern = re.compile(
+        r"^0001_PJサマリ_step0009_.*_単月・累計_損益計算書\.tsv$"
+    )
+    for pszName in sorted(os.listdir(pszDirectory)):
+        if not objPattern.match(pszName):
+            continue
+        pszPath = os.path.join(pszDirectory, pszName)
+        if os.path.isfile(pszPath):
+            objPaths.append(pszPath)
+    return objPaths
+
+
+def _build_excel_sheet_title_from_path(pszPath: str) -> str:
+    pszBaseName = os.path.splitext(os.path.basename(pszPath))[0]
+    objMatch = re.search(r"(\d{4}年\d{2}月-\d{4}年\d{2}月)", pszBaseName)
+    if objMatch:
+        return objMatch.group(1)
+    pszSanitized = re.sub(r"[\[\]\:\*\?\/\\]", "_", pszBaseName)
+    return pszSanitized[:31] if len(pszSanitized) > 31 else pszSanitized
+
+
+def create_pj_summary_sales_cost_sga_profit_excel(pszDirectory: str) -> Optional[str]:
+    objTsvPaths = _build_pj_summary_step0009_paths(pszDirectory)
+    if not objTsvPaths:
+        return None
+    pszTemplatePath: str = os.path.join(
+        os.path.dirname(__file__),
+        "TEMPLATE_PJサマリ_PJ別_売上・売上原価・販管費・利益率.xlsx",
+    )
+    if not os.path.isfile(pszTemplatePath):
+        return None
+    objWorkbook = load_workbook(pszTemplatePath)
+    objTemplateSheet = objWorkbook.worksheets[0]
+    for iIndex, pszInputPath in enumerate(objTsvPaths):
+        if iIndex == 0:
+            objSheet = objTemplateSheet
+        else:
+            objSheet = objWorkbook.copy_worksheet(objTemplateSheet)
+        objSheet.title = _build_excel_sheet_title_from_path(pszInputPath)
+        objRows = read_tsv_rows(pszInputPath)
+        for iRowIndex, objRow in enumerate(objRows, start=1):
+            for iColumnIndex, pszValue in enumerate(objRow, start=1):
+                objCellValue = parse_tsv_value_for_excel(pszValue)
+                objSheet.cell(
+                    row=iRowIndex,
+                    column=iColumnIndex,
+                    value=objCellValue,
+                )
+    pszTargetDirectory: str = os.path.join(pszDirectory, "PJサマリ")
+    os.makedirs(pszTargetDirectory, exist_ok=True)
+    pszOutputPath: str = os.path.join(
+        pszTargetDirectory,
+        "PJサマリ_PJ別_売上・売上原価・販管費・利益率.xlsx",
     )
     objWorkbook.save(pszOutputPath)
     return pszOutputPath
