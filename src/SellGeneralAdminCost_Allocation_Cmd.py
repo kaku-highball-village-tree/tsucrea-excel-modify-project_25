@@ -4828,9 +4828,14 @@ def create_pj_summary_sales_cost_sga_profit_excel(pszDirectory: str) -> Optional
     if not objTsvPaths:
         return None
     pszTemplatePath: str = os.path.join(
-        os.path.dirname(__file__),
+        pszDirectory,
         "TEMPLATE_PJサマリ_PJ別_売上・売上原価・販管費・利益率.xlsx",
     )
+    if not os.path.isfile(pszTemplatePath):
+        pszTemplatePath = os.path.join(
+            os.path.dirname(__file__),
+            "TEMPLATE_PJサマリ_PJ別_売上・売上原価・販管費・利益率.xlsx",
+        )
     if not os.path.isfile(pszTemplatePath):
         return None
     objWorkbook = load_workbook(pszTemplatePath)
