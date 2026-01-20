@@ -38,6 +38,7 @@ BUTTON_ID_OPEN_FOLDER: int = 1001
 BUTTON_HEIGHT: int = 28
 BUTTON_MARGIN: int = 10
 g_last_output_directory: Optional[str] = None
+g_open_folder_button_handle: Optional[int] = None
 
 
 def show_message_box(
@@ -107,6 +108,48 @@ def open_last_output_directory() -> None:
         )
         return
     os.startfile(g_last_output_directory)
+
+
+def update_open_folder_button_layout(iWindowHandle: int) -> None:
+    if g_open_folder_button_handle is None:
+        return
+    objClientRect = win32gui.GetClientRect(iWindowHandle)
+    iButtonWidth: int = objClientRect[2] - BUTTON_MARGIN * 2
+    if iButtonWidth < 120:
+        iButtonWidth = 120
+    iButtonX: int = BUTTON_MARGIN
+    iButtonY: int = objClientRect[3] - BUTTON_HEIGHT - BUTTON_MARGIN
+    win32gui.MoveWindow(
+        g_open_folder_button_handle,
+        iButtonX,
+        iButtonY,
+        iButtonWidth,
+        BUTTON_HEIGHT,
+        True,
+    )
+
+
+def create_open_folder_button(iWindowHandle: int) -> None:
+    global g_open_folder_button_handle
+    g_open_folder_button_handle = win32gui.CreateWindowEx(
+        win32con.WS_EX_NOPARENTNOTIFY,
+        "BUTTON",
+        "出力フォルダーを開く",
+        win32con.WS_TABSTOP
+        | win32con.WS_VISIBLE
+        | win32con.WS_CHILD
+        | win32con.BS_PUSHBUTTON,
+        0,
+        0,
+        120,
+        BUTTON_HEIGHT,
+        iWindowHandle,
+        BUTTON_ID_OPEN_FOLDER,
+        win32api.GetModuleHandle(None),
+        None,
+    )
+    win32gui.ShowWindow(g_open_folder_button_handle, win32con.SW_SHOWNORMAL)
+    update_open_folder_button_layout(iWindowHandle)
 
 
 def build_unique_temp_path(pszDirectory: str, pszFileName: str) -> str:
@@ -677,26 +720,7 @@ def window_proc(
             iWindowHandle,
             True,
         )
-        objClientRect = win32gui.GetClientRect(iWindowHandle)
-        iButtonWidth: int = objClientRect[2] - BUTTON_MARGIN * 2
-        iButtonX: int = BUTTON_MARGIN
-        iButtonY: int = objClientRect[3] - BUTTON_HEIGHT - BUTTON_MARGIN
-        win32gui.CreateWindow(
-            "BUTTON",
-            "出力フォルダーを開く",
-            win32con.WS_TABSTOP
-            | win32con.WS_VISIBLE
-            | win32con.WS_CHILD
-            | win32con.BS_PUSHBUTTON,
-            iButtonX,
-            iButtonY,
-            iButtonWidth,
-            BUTTON_HEIGHT,
-            iWindowHandle,
-            BUTTON_ID_OPEN_FOLDER,
-            win32api.GetModuleHandle(None),
-            None,
-        )
+        create_open_folder_button(iWindowHandle)
         return 0
 
     if iMessage == win32con.WM_DROPFILES:
@@ -833,6 +857,10 @@ def window_proc(
         if iCommandId == BUTTON_ID_OPEN_FOLDER and iNotifyCode == win32con.BN_CLICKED:
             open_last_output_directory()
             return 0
+
+    if iMessage == win32con.WM_SIZE:
+        update_open_folder_button_layout(iWindowHandle)
+        return 0
 
     if iMessage == win32con.WM_PAINT:
         draw_instruction_text(
