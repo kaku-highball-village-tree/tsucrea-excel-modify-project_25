@@ -34,6 +34,12 @@ import win32api
 import win32con
 import win32gui
 
+BUTTON_ID_OPEN_FOLDER: int = 1001
+BUTTON_HEIGHT: int = 28
+BUTTON_MARGIN: int = 10
+g_last_output_directory: Optional[str] = None
+g_open_folder_button_handle: Optional[int] = None
+
 
 def show_message_box(
     pszMessage: str,
@@ -77,6 +83,73 @@ def get_temp_output_directory() -> str:
     pszOutputDirectory: str = os.path.join(pszBaseDirectory, "temp")
     os.makedirs(pszOutputDirectory, exist_ok=True)
     return pszOutputDirectory
+
+
+def set_last_output_directory(pszDirectory: Optional[str]) -> None:
+    global g_last_output_directory
+    if pszDirectory is None:
+        return
+    if not os.path.isdir(pszDirectory):
+        return
+    g_last_output_directory = pszDirectory
+
+
+def open_last_output_directory() -> None:
+    if g_last_output_directory is None:
+        show_error_message_box(
+            "Error: 出力フォルダーがまだ作成されていません。",
+            "SellGeneralAdminCost_Allocation_DnD",
+        )
+        return
+    if not os.path.isdir(g_last_output_directory):
+        show_error_message_box(
+            "Error: 出力フォルダーが見つかりません。\n" + g_last_output_directory,
+            "SellGeneralAdminCost_Allocation_DnD",
+        )
+        return
+    os.startfile(g_last_output_directory)
+
+
+def update_open_folder_button_layout(iWindowHandle: int) -> None:
+    if g_open_folder_button_handle is None:
+        return
+    objClientRect = win32gui.GetClientRect(iWindowHandle)
+    iButtonWidth: int = objClientRect[2] - BUTTON_MARGIN * 2
+    if iButtonWidth < 120:
+        iButtonWidth = 120
+    iButtonX: int = BUTTON_MARGIN
+    iButtonY: int = objClientRect[3] - BUTTON_HEIGHT - BUTTON_MARGIN
+    win32gui.MoveWindow(
+        g_open_folder_button_handle,
+        iButtonX,
+        iButtonY,
+        iButtonWidth,
+        BUTTON_HEIGHT,
+        True,
+    )
+
+
+def create_open_folder_button(iWindowHandle: int) -> None:
+    global g_open_folder_button_handle
+    g_open_folder_button_handle = win32gui.CreateWindowEx(
+        win32con.WS_EX_NOPARENTNOTIFY,
+        "BUTTON",
+        "出力フォルダーを開く",
+        win32con.WS_TABSTOP
+        | win32con.WS_VISIBLE
+        | win32con.WS_CHILD
+        | win32con.BS_PUSHBUTTON,
+        0,
+        0,
+        120,
+        BUTTON_HEIGHT,
+        iWindowHandle,
+        BUTTON_ID_OPEN_FOLDER,
+        win32api.GetModuleHandle(None),
+        None,
+    )
+    win32gui.ShowWindow(g_open_folder_button_handle, win32con.SW_SHOWNORMAL)
+    update_open_folder_button_layout(iWindowHandle)
 
 
 def build_unique_temp_path(pszDirectory: str, pszFileName: str) -> str:
@@ -400,7 +473,9 @@ def run_allocation_with_pairs(
         return objResult.returncode
 
     pszStdOut: str = objResult.stdout
-    move_output_files_to_temp(pszStdOut)
+    objMoved = move_output_files_to_temp(pszStdOut)
+    if objMoved:
+        set_last_output_directory(os.path.dirname(objMoved[0]))
     if pszStdOut.strip() != "":
         print(pszStdOut)
     pszStdOut = "成功しました！"
@@ -606,11 +681,12 @@ def draw_instruction_text(
     )
 
     iMargin: int = 5
+    iBottomReserved: int = BUTTON_HEIGHT + BUTTON_MARGIN * 2
     objClientRect = (
         objClientRect[0] + iMargin,
         objClientRect[1] + iMargin,
         objClientRect[2] - iMargin,
-        objClientRect[3] - iMargin,
+        objClientRect[3] - iMargin - iBottomReserved,
     )
 
     pszInstructionText: str = (
@@ -644,6 +720,7 @@ def window_proc(
             iWindowHandle,
             True,
         )
+        create_open_folder_button(iWindowHandle)
         return 0
 
     if iMessage == win32con.WM_DROPFILES:
@@ -772,6 +849,17 @@ def window_proc(
             return 0
 
         run_allocation_with_pairs(objPairs)
+        return 0
+
+    if iMessage == win32con.WM_COMMAND:
+        iCommandId: int = win32api.LOWORD(iWparam)
+        iNotifyCode: int = win32api.HIWORD(iWparam)
+        if iCommandId == BUTTON_ID_OPEN_FOLDER and iNotifyCode == win32con.BN_CLICKED:
+            open_last_output_directory()
+            return 0
+
+    if iMessage == win32con.WM_SIZE:
+        update_open_folder_button_layout(iWindowHandle)
         return 0
 
     if iMessage == win32con.WM_PAINT:
